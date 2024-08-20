@@ -619,6 +619,7 @@ static ggml_backend_buffer_type_i ggml_backend_cuda_buffer_type_interface = {
 };
 
 GGML_CALL ggml_backend_buffer_type_t ggml_backend_cuda_buffer_type(int device) {
+    fprintf(stderr, "cuda.ggml_backend_cuda_buffer_type, device:%d\n", device);
     static std::mutex mutex;
     std::lock_guard<std::mutex> lock(mutex);
 

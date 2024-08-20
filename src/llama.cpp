@@ -3182,6 +3182,7 @@ struct llama_sbatch {
 struct llama_context {
     llama_context(const llama_model & model)
         : model(model)
+
         , t_start_us(model.t_start_us)
         , t_load_us(model.t_load_us) {}
 
@@ -3348,6 +3349,7 @@ static ggml_backend_buffer_type_t llama_default_buffer_type_offload(const llama_
     ggml_backend_buffer_type_t buft = nullptr;
 
 #ifdef GGML_USE_RPC
+    fprintf(stderr, "llama_default_buffer_type_offload: offload with prc\n");
     int rpc_count = (int)model.rpc_servers.size();
 #else
     int rpc_count = 0;
@@ -3362,6 +3364,7 @@ static ggml_backend_buffer_type_t llama_default_buffer_type_offload(const llama_
 #if defined(GGML_USE_METAL)
     buft = ggml_backend_metal_buffer_type();
 #elif defined(GGML_USE_CUDA)
+    fprintf(stderr, "llama_default_buffer_type_offload: cuda_buffer_type=local_gpu\n");
     buft = ggml_backend_cuda_buffer_type(local_gpu);
 #elif defined(GGML_USE_VULKAN)
     buft = ggml_backend_vk_buffer_type(local_gpu);
@@ -3388,6 +3391,7 @@ static ggml_backend_buffer_type_t llama_default_buffer_type_split(const llama_mo
     ggml_backend_buffer_type_t buft = nullptr;
 
 #ifdef GGML_USE_CUDA
+    fprintf(stderr, "llama_default_buffer_type_offload: offload with cuda\n");
     if (ggml_backend_cuda_get_device_count() > 1) {
         buft = ggml_backend_cuda_split_buffer_type(tensor_split);
     }
@@ -4331,6 +4335,7 @@ struct llama_model_loader {
         uint16_t n_split = 0;
         get_key(llm_kv(LLM_KV_SPLIT_COUNT), n_split, false);
 
+        fprintf(stderr, "llama.n_split:%d\n", n_split);
         // Load additional GGML contexts
         if (n_split > 1) {
             uint16_t idx = 0;
@@ -4350,7 +4355,9 @@ struct llama_model_loader {
 
             char split_path[PATH_MAX] = {0};
             for (idx = 1; idx < n_split; idx++) {
+                fprintf(stderr, "llama_split_path\n");
                 llama_split_path(split_path, sizeof(split_path), split_prefix, idx, n_split);
+                fprintf(stderr, "llama_split_path, path:%s\n", split_path);
 
                 struct gguf_init_params split_params = {
                     /*.no_alloc = */ true,
@@ -5239,7 +5246,10 @@ static const char * llama_model_vocab_type_name(enum llama_vocab_type type){
 }
 
 static void llm_load_arch(llama_model_loader & ml, llama_model & model) {
+    fprintf(stderr, "llama.llm_load_arch\n");
     model.arch = ml.get_arch();
+    std::string arch_str = LLM_ARCH_NAMES.at(model.arch);
+    fprintf(stderr, "llama.llm_load_arch, arch:%s\n", arch_str);
     if (model.arch == LLM_ARCH_UNKNOWN) {
         throw std::runtime_error("unknown model architecture: '" + ml.get_arch_name() + "'");
     }
@@ -6661,6 +6671,7 @@ static bool llm_load_tensors(
         bool use_mlock,
         llama_progress_callback progress_callback,
         void * progress_callback_user_data) {
+    fprintf(stderr, "llm_load_tensors\n");
     model.t_start_us = ggml_time_us();
 
     auto & hparams = model.hparams;
@@ -6668,8 +6679,12 @@ static bool llm_load_tensors(
     model.split_mode   = split_mode;
     model.main_gpu     = main_gpu;
     model.n_gpu_layers = n_gpu_layers;
+    fprintf(stderr, "llama.n_gpu_layers:%d\n", n_gpu_layers);
+    fprintf(stderr, "llama.split_mode:%d\n", int(split_mode));
 
     const int n_layer     = hparams.n_layer;
+    // i_gpu_start means the starting index of layers to load onto gpu
+    // so it is the total layer - predefined gpu layer
     const int i_gpu_start = std::max((int) hparams.n_layer - n_gpu_layers, (int) 0);
     bool use_mmap_buffer = true;
 
@@ -6680,16 +6695,21 @@ static bool llm_load_tensors(
     model.buft_layer.resize(n_layer);
 
     // assign cpu layers
+    //
+    // assgin cpu layers to all other layers
     for (int i = 0; i < i_gpu_start; ++i) {
         model.buft_layer[i] = llama_default_buffer_type_cpu(true);
     }
 
     if (split_mode == LLAMA_SPLIT_MODE_LAYER) {
+        fprintf(stderr, "llama.llm_load_tensors.split.LLAMA_SPLIT_MODE_LAYER\n");
         // calculate the split points
+        // based on the total device memory accumulated
         int device_count = llama_get_device_count(model);
         bool all_zero = tensor_split == nullptr || std::all_of(tensor_split, tensor_split + device_count, [](float x) { return x == 0.0f; });
         std::vector<float> splits(device_count);
         if (all_zero) {
+            fprintf(stderr, "llama.llm_load_tensors.split.all_zero, devicecount:%d\n", device_count);
             // default split, by free memory
             for (int i = 0; i < device_count; ++i) {
                 splits[i] = llama_get_device_memory(model, i);
@@ -6708,10 +6728,22 @@ static bool llm_load_tensors(
             splits[i] /= split_sum;
         }
 
+        fprintf(stderr, "------------\n");
+        for (int i = 0; i < device_count; ++i) {
+            fprintf(stderr, "%d: split:%f\n", i, splits[i]);
+        }
+        fprintf(stderr, "------------\n");
+
+        fprintf(stderr, "llama.llm_load_tensors.split. n_gpu_layers:%d, n_layer:%d\n", n_gpu_layers, n_layer);
         // assign the repeating layers to the devices according to the splits
         int act_gpu_layers = std::min(n_gpu_layers, (int)n_layer + 1);
+        fprintf(stderr, "llama.llm_load_tensors.split. from:%d, to:%d\n", i_gpu_start, n_layer);
         for (int i = i_gpu_start; i < n_layer; ++i) {
+            // check the split (in terms of memory) (i.e. called layer_gpu, the maximum layers you can actually assigned) from n_gpu_layers
+            // and assign the others ( n_gpu_layers - layer_gpu) to the offload type
+            //
             int layer_gpu = std::upper_bound(splits.begin(), splits.begin() + device_count, float(i - i_gpu_start)/act_gpu_layers) - splits.begin();
+            fprintf(stderr, "llama.llm_load_tensors.split. layer_gpu:%d, index:%d\n", layer_gpu, i);
             model.buft_layer[i] = llama_default_buffer_type_offload(model, layer_gpu);
         }
         // assign the output layer
@@ -6722,6 +6754,8 @@ static bool llm_load_tensors(
             model.buft_output = llama_default_buffer_type_cpu(true);
         }
     } else {
+
+        fprintf(stderr, "llama.llm_load_tensors.split.else\n");
         ggml_backend_buffer_type_t split_buft;
         if (split_mode == LLAMA_SPLIT_MODE_ROW) {
             split_buft = llama_default_buffer_type_split(model, main_gpu, tensor_split);
@@ -6747,16 +6781,40 @@ static bool llm_load_tensors(
         }
     }
 
+    fprintf(stderr, "buft---------------\n");
+    // display name for each layers
+    for (int i = 0; i < n_layer; ++i) {
+        fprintf(stderr, "layer: i:%d = name:%s\n", i, ggml_backend_buft_name(model.buft_layer[i].buft));
+    }
+    fprintf(stderr, "buft_matrix---------------\n");
+    // display name for each layers
+    for (int i = 0; i < n_layer; ++i) {
+        fprintf(stderr, "layer: i:%d = name:%s\n", i, ggml_backend_buft_name(model.buft_layer[i].buft_matrix));
+    }
+    fprintf(stderr, "---------------\n");
+
+
     // count used buffer types
     std::map<ggml_backend_buffer_type_t, int> buft_layer_count;
     buft_layer_count[model.buft_input.buft]++;
     buft_layer_count[model.buft_input.buft_matrix]++;
     buft_layer_count[model.buft_output.buft]++;
     buft_layer_count[model.buft_output.buft_matrix]++;
+    // 2( input & output )*2 (buf+buf_matrix)
     for (int i = 0; i < n_layer; ++i) {
         buft_layer_count[model.buft_layer[i].buft]++;
         buft_layer_count[model.buft_layer[i].buft_matrix]++;
     }
+
+    // debug
+    fprintf(stderr, "layer and its counts\n");
+    std::map<ggml_backend_buffer_type_t, int>::iterator it;
+    for (it = buft_layer_count.begin(); it != buft_layer_count.end(); it++) {
+        fprintf(stderr, "layer:%s -> %d\n",  ggml_backend_buft_name(it->first), it->second);
+        // layer:CUDA_Host -> 36
+        // layer:CUDA0 -> 32
+    }
+    fprintf(stderr, "----------\n");
 
     // create one context per buffer type
     size_t ctx_size = ggml_tensor_overhead()*(ml.n_tensors + 1); // +1 for models where tok_embd is duplicated as output
@@ -8601,6 +8659,7 @@ static bool llm_load_tensors(
 
 // Returns 0 on success, -1 on error, and -2 on cancellation via llama_progress_callback
 static int llama_model_load(const std::string & fname, llama_model & model, llama_model_params & params) {
+    fprintf(stderr, "llama.llama_model_load is called\n");
     try {
         llama_model_loader ml(fname, params.use_mmap, params.check_tensors, params.kv_overrides);
 
@@ -9701,6 +9760,7 @@ struct llm_build_context {
     }
 
     struct ggml_cgraph * build_k_shift() {
+        fprintf(stderr, "ggml_cgraph.build_k_shift\n");
         struct ggml_cgraph * gf = ggml_new_graph_custom(ctx0, llama_model_max_nodes(model), false);
 
         GGML_ASSERT(kv_self.size == n_ctx);
@@ -9732,6 +9792,7 @@ struct llm_build_context {
     }
 
     struct ggml_cgraph * build_defrag(const std::vector<uint32_t> & ids) {
+        fprintf(stderr, "ggml_cgraph.build_defrag\n");
         struct ggml_cgraph * gf = ggml_new_graph_custom(ctx0, llama_model_max_nodes(model), false);
 
         for (uint32_t i = 0; i < ids.size(); ++i) {
@@ -9970,6 +10031,7 @@ struct llm_build_context {
     }
 
     struct ggml_cgraph * build_llama() {
+        fprintf(stderr, "ggml_cgraph.build_llama\n");
         struct ggml_cgraph * gf = ggml_new_graph_custom(ctx0, llama_model_max_nodes(model), false);
 
         // mutable variable, needed during the last layer of the computation to skip unused tokens
@@ -10116,6 +10178,7 @@ struct llm_build_context {
     }
 
     struct ggml_cgraph * build_baichuan() {
+        fprintf(stderr, "ggml_cgraph.build_baichuan\n");
         struct ggml_cgraph * gf = ggml_new_graph_custom(ctx0, llama_model_max_nodes(model), false);
 
         const int64_t n_embd_head = hparams.n_embd_head_v;
@@ -10231,6 +10294,7 @@ struct llm_build_context {
     }
 
     struct ggml_cgraph * build_xverse() {
+        fprintf(stderr, "ggml_cgraph.build_xverse\n");
         struct ggml_cgraph * gf = ggml_new_graph_custom(ctx0, llama_model_max_nodes(model), false);
 
         const int64_t n_embd_head = hparams.n_embd_head_v;
@@ -10334,6 +10398,7 @@ struct llm_build_context {
     }
 
     struct ggml_cgraph * build_falcon() {
+        fprintf(stderr, "ggml_cgraph.falcon\n");
         struct ggml_cgraph * gf = ggml_new_graph_custom(ctx0, llama_model_max_nodes(model), false);
 
         const int64_t n_embd_head = hparams.n_embd_head_v;
@@ -10454,6 +10519,7 @@ struct llm_build_context {
     }
 
     struct ggml_cgraph * build_grok() {
+        fprintf(stderr, "ggml_cgraph.grok\n");
         struct ggml_cgraph * gf = ggml_new_graph_custom(ctx0, llama_model_max_nodes(model), false);
 
         // mutable variable, needed during the last layer of the computation to skip unused tokens
@@ -15256,6 +15322,7 @@ static struct ggml_cgraph * llama_build_graph(
     const llama_ubatch & batch,
                   bool   worst_case) {
     const auto & model = lctx.model;
+    fprintf(stderr, "llama_build_graph\n");
 
     // this callback allows us to apply custom logic to each tensor (e.g. ggml-alloc, offloading, etc.)
     llm_build_cb cb = [&](struct ggml_tensor * cur, const char * name, int il) {
@@ -18283,6 +18350,7 @@ struct llama_context * llama_new_context_with_model(
                 llama_free(ctx);
                 return nullptr;
             }
+            fprintf(stderr, "ctx->backend is pushback with cuda\n");
             ctx->backends.push_back(backend);
         } else {
             // LLAMA_SPLIT_MODE_LAYER requires a backend for each GPU
@@ -18293,6 +18361,7 @@ struct llama_context * llama_new_context_with_model(
                     llama_free(ctx);
                     return nullptr;
                 }
+                fprintf(stderr, "ctx->backend is pushback with cuda\n");
                 ctx->backends.push_back(backend);
             }
         }
@@ -18394,6 +18463,8 @@ struct llama_context * llama_new_context_with_model(
             llama_free(ctx);
             return nullptr;
         }
+
+        fprintf(stderr, "ctx->backend is pushback with cpu\n");
         ctx->backends.push_back(ctx->backend_cpu);
 
         if (!llama_kv_cache_init(ctx->kv_self, ctx, type_k, type_v, kv_size, cparams.offload_kqv)) {
@@ -18458,6 +18529,7 @@ struct llama_context * llama_new_context_with_model(
                 model->n_gpu_layers > (int)model->hparams.n_layer &&
                 model->split_mode == LLAMA_SPLIT_MODE_LAYER &&
                 params.offload_kqv;
+            fprintf(stderr, "pipeline-parallel:%d\n", pipeline_parallel);
 #ifndef GGML_USE_CUDA
             // pipeline parallelism requires support for async compute and events
             // currently this is only implemented in the CUDA backend
@@ -18753,6 +18825,12 @@ static bool llama_control_vector_init(struct llama_control_vector & cvec, const 
     for (int64_t i = 0; i < model.hparams.n_layer; i++) {
         buft_layer_count[model.buft_layer[i].buft]++;
     }
+
+    fprintf(stderr, "------------\n");
+    for (auto & it : buft_layer_count) {
+        fprintf(stderr, "type:%s with count:%d\n", ggml_backend_buft_name(it.first), it.second);
+    }
+    fprintf(stderr, "------------\n");
 
     // allocate contexts
     std::map<ggml_backend_buffer_type_t, ggml_context *> ctx_map;

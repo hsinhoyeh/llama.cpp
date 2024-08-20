@@ -480,6 +480,8 @@ int main(int argc, char ** argv) {
 
     const int ga_n = params.grp_attn_n;
     const int ga_w = params.grp_attn_w;
+    fprintf(stderr, "ga_n:%d\n", ga_n); 
+    fprintf(stderr, "ga_w:%d\n", ga_w);
 
     if (ga_n != 1) {
         GGML_ASSERT(ga_n > 0                    && "grp_attn_n must be positive");                     // NOLINT
@@ -575,6 +577,7 @@ int main(int argc, char ** argv) {
             }
 
             if (ga_n == 1) {
+                fprintf(stderr, "ga_n=1\n");
                 // infinite text generation via context shifting
                 // if we run out of context:
                 // - take the n_keep first tokens from the original prompt (via n_past)
@@ -604,6 +607,7 @@ int main(int argc, char ** argv) {
                     path_session.clear();
                 }
             } else {
+                fprintf(stderr, "ga_n!=1\n");
                 // context extension via Self-Extend
                 while (n_past >= ga_i + ga_w) {
                     const int ib = (ga_n*ga_i)/ga_w;

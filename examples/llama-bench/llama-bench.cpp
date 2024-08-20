@@ -235,6 +235,8 @@ struct cmd_params {
     std::vector<std::string> cpu_mask;
     std::vector<bool> cpu_strict;
     std::vector<int> poll;
+    // n_gpu_layers means how many layers are loaded onto GPU
+    // the more layers you have putted onto gpu, the higher performacen you can gain
     std::vector<int> n_gpu_layers;
     std::vector<std::string> rpc_servers;
     std::vector<llama_split_mode> split_mode;

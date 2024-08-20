@@ -1125,46 +1125,64 @@ static void rpc_serve_client(ggml_backend_t backend, sockfd_t sockfd, size_t fre
         bool ok = true;
         switch (cmd) {
             case RPC_CMD_ALLOC_BUFFER: {
+                fprintf(stderr, "rpc_serve_client: RPC_CMD_ALLOC_BUFFER\n");
                 ok = server.alloc_buffer(input, output);
+                // return remote_ptr and remote_alloc_size
                 break;
             }
             case RPC_CMD_GET_ALIGNMENT: {
+                fprintf(stderr, "rpc_serve_client: RPC_CMD_GET_ALIGNMENT\n");
                 server.get_alignment(output);
+                // return a 8 bytes alignment
                 break;
             }
             case RPC_CMD_GET_MAX_SIZE: {
+                fprintf(stderr, "rpc_serve_client: RPC_CMD_GET_MAX_SIZE\n");
                 server.get_max_size(output);
+                // return a 8 bytes max size
                 break;
             }
             case RPC_CMD_BUFFER_GET_BASE: {
+                fprintf(stderr, "rpc_serve_client: RPC_CMD_BUFFER_GET_BASE\n");
                 ok = server.buffer_get_base(input, output);
+                // return a 8 bytes base address
                 break;
             }
             case RPC_CMD_FREE_BUFFER: {
+                fprintf(stderr, "rpc_serve_client: RPC_CMD_FREE_BUFFER\n");
                 ok = server.free_buffer(input);
+                // free the buffer provided by the input addr
                 break;
             }
             case RPC_CMD_BUFFER_CLEAR: {
+                fprintf(stderr, "rpc_serve_client: RPC_CMD_BUFFER_CLEAR\n");
                 ok = server.buffer_clear(input);
+                // return a bool to signal true/false clean the buffer
                 break;
             }
             case RPC_CMD_SET_TENSOR: {
+                fprintf(stderr, "rpc_serve_client: RPC_CMD_SET_TENSOR\n");
                 ok = server.set_tensor(input);
+                // return a bool to signal the tensor has been set into the internal buffer
                 break;
             }
             case RPC_CMD_GET_TENSOR: {
+                fprintf(stderr, "rpc_serve_client: RPC_CMD_GET_TENSOR\n");
                 ok = server.get_tensor(input, output);
                 break;
             }
             case RPC_CMD_COPY_TENSOR: {
+                fprintf(stderr, "rpc_serve_client: RPC_CMD_COPY_TENSOR\n");
                 ok = server.copy_tensor(input, output);
                 break;
             }
             case RPC_CMD_GRAPH_COMPUTE: {
+                fprintf(stderr, "rpc_serve_client: RPC_CMD_GRAPH_COMPUTE\n");
                 ok = server.graph_compute(input, output);
                 break;
             }
             case RPC_CMD_GET_DEVICE_MEMORY: {
+                fprintf(stderr, "rpc_serve_client: RPC_CMD_GET_DEVICE_MEMORY\n");
                 // output serialization format: | free (8 bytes) | total (8 bytes) |
                 output.resize(2*sizeof(uint64_t), 0);
                 memcpy(output.data(), &free_mem, sizeof(free_mem));

@@ -1280,6 +1280,7 @@ static void ggml_backend_sched_set_if_supported(ggml_backend_sched_t sched, stru
 
 // assigns backends to ops and splits the graph into subgraphs that can be computed on the same backend
 static void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct ggml_cgraph * graph) {
+    fprintf(stderr, "ggml_backend_sched_split_graph\n");
     // reset splits
     sched->n_splits = 0;
     sched->n_graph_inputs = 0;
@@ -1882,6 +1883,9 @@ ggml_backend_sched_t ggml_backend_sched_new(
     sched->n_backends = n_backends;
     sched->n_copies = parallel ? GGML_SCHED_MAX_COPIES : 1;
 
+    fprintf(stderr, "ggml-backend.ggml_backend_sched_new.n_backends:%d\n", n_backends);
+    fprintf(stderr, "ggml-backend.ggml_backend_sched_new.n_copies:%d\n", sched->n_copies);
+
     // initialize hash table
     // FIXME: needs to be size*2 to account for leafs (do it in graph_split instead)
     sched->hash_set    = ggml_hash_set_new(graph_size);
@@ -1913,6 +1917,7 @@ ggml_backend_sched_t ggml_backend_sched_new(
         }
     }
 
+    fprintf(stderr, "ggml_gallocr_new_n calling, n_backends=%d\n", n_backends);
     sched->galloc = ggml_gallocr_new_n(sched->bufts, n_backends);
 
     ggml_backend_sched_reset(sched);

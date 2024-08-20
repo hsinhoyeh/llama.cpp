@@ -284,7 +284,7 @@ void ggml_abort(const char * file, int line, const char * fmt, ...) {
     abort();
 }
 
-#define GGML_DEBUG 0
+#define GGML_DEBUG 1
 #define GGML_GELU_FP16
 #define GGML_GELU_QUICK_FP16
 #define GGML_N_TASKS_MAX (-1)
@@ -3235,6 +3235,7 @@ static uint32_t ggml_get_numa_affinity(void) {
 #endif
 
 void ggml_numa_init(enum ggml_numa_strategy numa_flag) {
+    fprintf(stderr, "ggml.ggml_numa_init is called\n");
     if (g_state.numa.n_nodes > 0) {
         fprintf(stderr, "ggml_numa_init: NUMA already initialized\n");
 
@@ -3644,19 +3645,23 @@ static inline int ggml_up(int n, int m) {
 ////////////////////////////////////////////////////////////////////////////////
 
 struct ggml_context * ggml_init(struct ggml_init_params params) {
+    fprintf(stderr, "ggml.ggml_init is called\n");
     // make this function thread safe
     ggml_critical_section_start();
 
     static bool is_first_call = true;
+    fprintf(stderr, "ggml.ggml_init is called with is_first_call:%d\n", is_first_call);
 
     if (is_first_call) {
         // initialize time system (required on Windows)
         ggml_time_init();
 
+        fprintf(stderr, "ggml.ggml_init is called with block1\n");
         // initialize GELU, Quick GELU, SILU and EXP F32 tables
         {
             const uint64_t t_start = ggml_time_us(); UNUSED(t_start);
 
+            fprintf(stderr, "ggml.ggml_init is called with loop:%d\n", (1 << 16));
             for (int i = 0; i < (1 << 16); ++i) {
                 union {
                     uint16_t u16;
@@ -3672,6 +3677,7 @@ struct ggml_context * ggml_init(struct ggml_init_params params) {
             GGML_PRINT_DEBUG("%s: GELU, Quick GELU, SILU and EXP tables initialized in %f ms\n", __func__, (t_end - t_start)/1000.0f);
         }
 
+        fprintf(stderr, "ggml.ggml_init is called with block2\n");
         // initialize g_state
         {
             const uint64_t t_start = ggml_time_us(); UNUSED(t_start);
@@ -3695,6 +3701,8 @@ struct ggml_context * ggml_init(struct ggml_init_params params) {
 
         is_first_call = false;
     }
+
+    fprintf(stderr, "ggml.ggml_init is_fist_call:%d\n", is_first_call);
 
     // find non-used context in g_state
     struct ggml_context * ctx = NULL;
@@ -3860,6 +3868,7 @@ static struct ggml_object * ggml_new_object(struct ggml_context * ctx, enum ggml
     // align to GGML_MEM_ALIGN
     size_t size_needed = GGML_PAD(size, GGML_MEM_ALIGN);
 
+    // mem_beffer is a pre-allocated memory buffer for holding ggml_object
     char * const mem_buffer = ctx->mem_buffer;
     struct ggml_object * const obj_new = (struct ggml_object *)(mem_buffer + cur_end);
 
@@ -3871,7 +3880,7 @@ static struct ggml_object * ggml_new_object(struct ggml_context * ctx, enum ggml
     }
 
     *obj_new = (struct ggml_object) {
-        .offs = cur_end + GGML_OBJECT_SIZE,
+        .offs = cur_end + GGML_OBJECT_SIZE, // offset on the ctx object itself
         .size = size_needed,
         .next = NULL,
         .type = type,
@@ -19070,6 +19079,7 @@ size_t ggml_graph_overhead(void) {
 }
 
 struct ggml_cgraph * ggml_new_graph_custom(struct ggml_context * ctx, size_t size, bool grads) {
+    fprintf(stderr, "ggml_new_graph_custom, size:%zu, grads:%d\n", size, grads);
     const size_t obj_size = ggml_graph_nbytes(size, grads);
     struct ggml_object * obj = ggml_new_object(ctx, GGML_OBJECT_TYPE_GRAPH, obj_size);
     struct ggml_cgraph * cgraph = (struct ggml_cgraph *) ((char *) ctx->mem_buffer + obj->offs);
@@ -19105,6 +19115,7 @@ struct ggml_cgraph * ggml_new_graph_custom(struct ggml_context * ctx, size_t siz
 }
 
 struct ggml_cgraph * ggml_new_graph(struct ggml_context * ctx) {
+    fprintf(stderr, "ggml_new_graph\n");
     return ggml_new_graph_custom(ctx, GGML_DEFAULT_GRAPH_SIZE, false);
 }
 
@@ -19156,6 +19167,7 @@ void ggml_graph_cpy(struct ggml_cgraph * src, struct ggml_cgraph * dst) {
 }
 
 struct ggml_cgraph * ggml_graph_dup(struct ggml_context * ctx, struct ggml_cgraph * cgraph) {
+    fprintf(stderr, "ggml_graph_dup\n");
     struct ggml_cgraph * result = ggml_new_graph_custom(ctx, cgraph->size, cgraph->grads != NULL);
     ggml_graph_cpy(cgraph, result);
     return result;
@@ -19931,6 +19943,8 @@ struct ggml_cplan ggml_graph_plan(
 }
 
 static thread_ret_t ggml_graph_compute_thread(void * data) {
+
+    fprintf(stderr, "ggml_graph_compute_thread\n");
     struct ggml_compute_state * state = (struct ggml_compute_state *) data;
 
     const struct ggml_cgraph * cgraph = state->threadpool->cgraph;
@@ -20016,6 +20030,7 @@ static inline bool ggml_graph_compute_check_for_work(struct ggml_compute_state *
 }
 
 static thread_ret_t ggml_graph_compute_secondary_thread(void* data) {
+    fprintf(stderr, "ggml_graph_compute_secondary_thread\n");
     struct ggml_compute_state * state = (struct ggml_compute_state *) data;
     struct ggml_threadpool * threadpool = state->threadpool;
 
@@ -20108,6 +20123,7 @@ static struct ggml_threadpool * ggml_threadpool_new_impl(
                struct ggml_cgraph * cgraph,
                 struct ggml_cplan * cplan) {
 
+    fprintf(stderr, "ggml_threadpool_new_impl\n");
     struct ggml_threadpool * threadpool =
         GGML_ALIGNED_MALLOC(sizeof(struct ggml_threadpool));
     {
@@ -20170,6 +20186,7 @@ static struct ggml_threadpool * ggml_threadpool_new_impl(
 }
 
 struct ggml_threadpool * ggml_threadpool_new(struct ggml_threadpool_params * tpp) {
+    fprintf(stderr, "ggml_threadpool_new\n");
     return ggml_threadpool_new_impl(tpp, NULL, NULL);
 }
 
@@ -20177,6 +20194,8 @@ enum ggml_status ggml_graph_compute(struct ggml_cgraph * cgraph, struct ggml_cpl
     GGML_ASSERT(cplan);
     GGML_ASSERT(cplan->n_threads > 0);
     GGML_ASSERT(cplan->work_size == 0 || cplan->work_data != NULL);
+
+    fprintf(stderr, "ggml_graph_compute\n");
 
     int n_threads                               = cplan->n_threads;
     struct ggml_threadpool * threadpool = cplan->threadpool;
@@ -20240,6 +20259,8 @@ enum ggml_status ggml_graph_compute(struct ggml_cgraph * cgraph, struct ggml_cpl
 }
 
 enum ggml_status ggml_graph_compute_with_ctx(struct ggml_context * ctx, struct ggml_cgraph * cgraph, int n_threads) {
+
+    fprintf(stderr, "ggml_graph_compute_with_ctx\n");
     struct ggml_cplan cplan = ggml_graph_plan(cgraph, n_threads, NULL);
 
     struct ggml_object * obj = ggml_new_object(ctx, GGML_OBJECT_TYPE_WORK_BUFFER, cplan.work_size);
@@ -20501,6 +20522,7 @@ struct ggml_cgraph * ggml_graph_import(const char * fname, struct ggml_context *
 
     struct ggml_tensor * data = NULL;
 
+    fprintf(stderr, "ggml_graph_import\n");
     // read file into data
     {
         FILE * fin = ggml_fopen(fname, "rb");
@@ -21818,6 +21840,7 @@ enum ggml_opt_result ggml_opt_resume(
         struct ggml_opt_context * opt,
         struct ggml_tensor * f) {
 
+    fprintf(stderr, "ggml_opt_resume\n");
     // build forward + backward compute graphs
     struct ggml_cgraph * gf = ggml_new_graph_custom(ctx, opt->params.graph_size, true);
     ggml_build_forward_expand(gf, f);

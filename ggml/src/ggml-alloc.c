@@ -310,6 +310,8 @@ static struct ggml_dyn_tallocr * ggml_dyn_tallocr_new(size_t alignment) {
     };
 
     ggml_dyn_tallocr_reset(alloc);
+    fprintf(stderr, "ggml_dyn_tallocr.alloc.max_size:%zu\n", alloc->max_size);
+    fprintf(stderr, "ggml_dyn_tallocr.alloc.free_blocks[0].size:%zu\n", alloc->free_blocks[0].size);
 
     return alloc;
 }
@@ -368,6 +370,7 @@ struct ggml_gallocr {
 };
 
 ggml_gallocr_t ggml_gallocr_new_n(ggml_backend_buffer_type_t * bufts, int n_bufs) {
+    fprintf(stderr, "ggml_gallocr_new_n.n_bufs:%d\n", n_bufs);
     ggml_gallocr_t galloc = (ggml_gallocr_t)calloc(1, sizeof(struct ggml_gallocr));
     GGML_ASSERT(galloc != NULL);
 
@@ -392,6 +395,7 @@ ggml_gallocr_t ggml_gallocr_new_n(ggml_backend_buffer_type_t * bufts, int n_bufs
             }
         }
 
+        fprintf(stderr, "n_bufs.i:%d\n", i);
         if (galloc->buf_tallocs[i] == NULL) {
             size_t alignment = ggml_backend_buft_get_alignment(bufts[i]);
             galloc->buf_tallocs[i] = ggml_dyn_tallocr_new(alignment);

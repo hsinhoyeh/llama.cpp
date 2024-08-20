@@ -81,6 +81,7 @@ static struct clip_image_grid_shape get_anyres_image_grid_shape(const std::pair<
             possible_resolutions.push_back({params.image_grid_pinpoints[i], params.image_grid_pinpoints[i+1]});
         }
      */
+    fprintf(stderr, "get_anyres_image_grid_shape\n");
     auto best_resolution = select_best_resolution(image_size, grid_pinpoints);
     return {best_resolution.first / image_patch_size, best_resolution.second / image_patch_size};
 }
@@ -240,6 +241,7 @@ static bool encode_image_with_clip(clip_ctx * ctx_clip, int n_threads, const cli
         delete[] img_res_v.data;
         return false;
     }
+    fprintf(stderr, "encode_image_with_clip\n");
 
     const int64_t t_img_enc_start_us = ggml_time_us();
 

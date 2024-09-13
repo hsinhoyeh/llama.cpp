@@ -29,7 +29,7 @@
 
 #define UNUSED GGML_UNUSED
 
-#define GGML_DEBUG 0
+#define GGML_DEBUG 1
 #if (GGML_DEBUG >= 1)
 #define GGML_PRINT_DEBUG(...) printf(__VA_ARGS__)
 #else
@@ -782,6 +782,7 @@ bool rpc_server::alloc_buffer(const std::vector<uint8_t> & input, std::vector<ui
     memcpy(&size, input.data(), sizeof(size));
     ggml_backend_buffer_type_t buft = ggml_backend_get_default_buffer_type(backend);
     ggml_backend_buffer_t buffer = ggml_backend_buft_alloc_buffer(buft, size);
+    fprintf(stderr, "alloc_buffer, size:%" PRId64"\n", size);
     uint64_t remote_ptr = 0;
     uint64_t remote_size = 0;
     if (buffer != nullptr) {
@@ -800,6 +801,7 @@ bool rpc_server::alloc_buffer(const std::vector<uint8_t> & input, std::vector<ui
 }
 
 void rpc_server::get_alignment(std::vector<uint8_t> & output) {
+    // get_alignment is a fixed value per backend
     ggml_backend_buffer_type_t buft = ggml_backend_get_default_buffer_type(backend);
     size_t alignment = ggml_backend_buft_get_alignment(buft);
     GGML_PRINT_DEBUG("[%s] alignment: %lu\n", __func__, alignment);

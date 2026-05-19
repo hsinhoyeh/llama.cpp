@@ -562,6 +562,16 @@ extern "C" {
     LLAMA_API int32_t llama_model_n_head_kv  (const struct llama_model * model);
     LLAMA_API int32_t llama_model_n_swa      (const struct llama_model * model);
 
+    // MTP-aware helpers. Returns true if the model has Multi-Token Prediction
+    // heads (i.e. nextn_predict_layers > 0). Callers can use this to decide
+    // whether to set llama_context_params.ctx_type = LLAMA_CONTEXT_TYPE_MTP and
+    // configure a common_speculative_* chain. The MTP activation itself remains
+    // opt-in — these accessors only expose the metadata so wrappers (Go / Rust /
+    // Python bindings) don't have to spelunk into hparams. Returns 0 / false on
+    // non-MTP models.
+    LLAMA_API bool     llama_model_has_mtp     (const struct llama_model * model);
+    LLAMA_API uint32_t llama_model_n_mtp_layers(const struct llama_model * model);
+
     // Get the model's RoPE frequency scaling factor
     LLAMA_API float llama_model_rope_freq_scale_train(const struct llama_model * model);
 

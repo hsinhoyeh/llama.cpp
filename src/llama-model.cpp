@@ -2182,6 +2182,14 @@ int32_t llama_model_n_swa(const llama_model * model) {
     return model->hparams.n_swa;
 }
 
+bool llama_model_has_mtp(const llama_model * model) {
+    return model->hparams.nextn_predict_layers > 0;
+}
+
+uint32_t llama_model_n_mtp_layers(const llama_model * model) {
+    return model->hparams.nextn_predict_layers;
+}
+
 
 uint32_t llama_model_n_cls_out(const struct llama_model * model) {
     return model->hparams.n_cls_out;
